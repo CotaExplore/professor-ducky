@@ -1,9 +1,39 @@
 const router = require('express').Router();
 const https = require('https');
 
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function optionalString(value) {
+  return value === undefined || value === null || typeof value === 'string';
+}
+
+function validationError(res, message) {
+  return res.status(400).json({ error: message });
+}
+
+function readOptionalString(value) {
+  return isNonEmptyString(value) ? value.trim() : null;
+}
+
 const DUCK_SYSTEM = `You are Professor Ducky — a warm, encouraging university learning companion built on the rubber duck debugging principle.
 
 Your purpose is to help students learn through explanation, reflection, questioning, and guided discovery. You are not an answer generator, assignment writer, or coding assistant for assessed work.
+
+SCOPE RESTRICTION AND GENERAL QUESTION HANDLING
+
+Professor Ducky only supports academic learning, study skills, module-related concepts, assignment understanding, revision, debugging as learning, and reflective academic practice.
+
+Professor Ducky must not act as a general-purpose assistant, calculator, search assistant, trivia bot, productivity assistant, personal adviser, or direct answer engine.
+
+If a student asks something outside academic study, Professor Ducky must briefly redirect the conversation back to learning. Do not answer the non-academic request directly.
+
+If the request could be academic practice but is phrased as a direct-answer question, including simple arithmetic, factual recall, quiz-style questions, or "what is the answer?" prompts, Professor Ducky must not give only the final answer. Instead, treat it as a learning opportunity: explain the thinking process briefly, ask the student to attempt the final step, or invite them to identify the concept being practised.
+
+For example, if asked "what is 2 x 1?", do not simply answer "2". Guide the student by explaining that multiplication means groups of a number and ask them to work out the total.
+
+If the student confirms they are practising a topic, continue tutoring within the academic learning context. If they only want a direct answer with no learning purpose, redirect back to study support.
 
 Your highest priorities in order:
 1. Protect academic integrity
@@ -147,6 +177,145 @@ async function callAIMessages(messages) {
 
   return callProvider({ apiKey: geminiKey, apiUrl: GEMINI_URL, model: geminiModel, messages, maxTokens: 1500, temperature: 0.75 });
 }
+
+router.get('/student/context', (_req, res) => {
+  res.json({
+    student_id: 'unconfigured',
+    modules: [],
+    active_assignments: [],
+    learning_profile: {
+      mode: 'unconfigured',
+      note: 'No persistent student profile store is currently configured.',
+    },
+  });
+});
+
+router.post('/memory/relevant', (req, res) => {
+  const { query, module_id } = req.body || {};
+  if (!isNonEmptyString(query)) return validationError(res, 'query is required');
+  if (!optionalString(module_id)) return validationError(res, 'module_id must be a string when provided');
+
+  res.json({
+    query: query.trim(),
+    module_id: readOptionalString(module_id),
+    gaps: [],
+    flashcards: [],
+    session_summaries: [],
+    topic_coverage: [],
+    persistent_store_configured: false,
+    note: 'No persistent learning memory store is currently configured.',
+  });
+});
+
+router.post('/flashcards/propose', (req, res) => {
+  const { topic, question, answer } = req.body || {};
+  if (!isNonEmptyString(topic)) return validationError(res, 'topic is required');
+  if (!isNonEmptyString(question)) return validationError(res, 'question is required');
+  if (!isNonEmptyString(answer)) return validationError(res, 'answer is required');
+
+  res.json({
+    proposed: true,
+    saved: false,
+    topic: topic.trim(),
+    question: question.trim(),
+    answer: answer.trim(),
+    note: 'Proposal only. No flashcard was saved because no persistent flashcard store is currently configured.',
+  });
+});
+
+router.post('/flashcards/save', (req, res) => {
+  const { topic, question, answer } = req.body || {};
+  if (!isNonEmptyString(topic)) return validationError(res, 'topic is required');
+  if (!isNonEmptyString(question)) return validationError(res, 'question is required');
+  if (!isNonEmptyString(answer)) return validationError(res, 'answer is required');
+
+  res.json({
+    accepted: true,
+    saved: false,
+    persistent_store_configured: false,
+    flashcard: {
+      topic: topic.trim(),
+      question: question.trim(),
+      answer: answer.trim(),
+    },
+    note: 'No persistent flashcard store is currently configured, so this request was acknowledged but not saved.',
+  });
+});
+
+router.post('/gaps/propose', (req, res) => {
+  const { topic, reason } = req.body || {};
+  if (!isNonEmptyString(topic)) return validationError(res, 'topic is required');
+  if (!isNonEmptyString(reason)) return validationError(res, 'reason is required');
+
+  res.json({
+    proposed: true,
+    saved: false,
+    topic: topic.trim(),
+    reason: reason.trim(),
+    note: 'Proposal only. No learning gap was saved because no persistent learning gap store is currently configured.',
+  });
+});
+
+router.post('/gaps/save', (req, res) => {
+  const { topic, reason } = req.body || {};
+  if (!isNonEmptyString(topic)) return validationError(res, 'topic is required');
+  if (!isNonEmptyString(reason)) return validationError(res, 'reason is required');
+
+  res.json({
+    accepted: true,
+    saved: false,
+    persistent_store_configured: false,
+    gap: {
+      topic: topic.trim(),
+      reason: reason.trim(),
+    },
+    note: 'No persistent learning gap store is currently configured, so this request was acknowledged but not saved.',
+  });
+});
+
+router.post('/topics/log', (req, res) => {
+  const { topic, module_id, confidence } = req.body || {};
+  if (!isNonEmptyString(topic)) return validationError(res, 'topic is required');
+  if (!optionalString(module_id)) return validationError(res, 'module_id must be a string when provided');
+  if (typeof confidence !== 'number' || Number.isNaN(confidence)) return validationError(res, 'confidence is required and must be a number');
+
+  res.json({
+    accepted: true,
+    logged: false,
+    persistent_store_configured: false,
+    topic: topic.trim(),
+    module_id: readOptionalString(module_id),
+    confidence,
+    note: 'No persistent topic log store is currently configured, so this request was acknowledged but not logged.',
+  });
+});
+
+router.post('/sessions/summary', (req, res) => {
+  const { summary } = req.body || {};
+  if (!Array.isArray(summary)) return validationError(res, 'summary must be an array');
+  if (summary.length < 3 || summary.length > 5) return validationError(res, 'summary must contain 3 to 5 strings');
+  if (!summary.every(isNonEmptyString)) return validationError(res, 'summary must contain only non-empty strings');
+
+  res.json({
+    accepted: true,
+    saved: false,
+    persistent_store_configured: false,
+    summary: summary.map(point => point.trim()),
+    note: 'No persistent session summary store is currently configured, so this request was acknowledged but not saved.',
+  });
+});
+
+router.get('/assignments/context', (req, res) => {
+  const assignmentId = readOptionalString(req.query.assignment_id);
+  if (!assignmentId) return validationError(res, 'assignment_id is required');
+
+  res.json({
+    assignment_id: assignmentId,
+    found: false,
+    context: null,
+    note: 'No assignment store is currently configured.',
+  });
+});
 
 router.post('/chat', async (req, res) => {
   const { messages, brief } = req.body;
