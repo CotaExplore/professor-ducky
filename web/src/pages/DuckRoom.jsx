@@ -321,7 +321,14 @@ The text outside is spoken. Inside is drawn on screen separately.`;
             {showVoiceMenu && (
               <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, background: 'rgba(20,60,85,0.98)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: '0.5rem', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 100 }}
                 onMouseLeave={() => setShowVoiceMenu(false)}>
-                <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', padding: '0.2rem 0.6rem', margin: '0 0 4px' }}>Used if ElevenLabs is unavailable</p>
+                <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', padding: '0.2rem 0.6rem', margin: '0 0 2px' }}>ElevenLabs voices (auto)</p>
+                {['Nicole', 'Rachel', 'Bella', 'Elli', 'Antoni', 'Adam'].map(name => (
+                  <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0.3rem 0.6rem', borderRadius: 7 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>{name}</span>
+                    <span style={{ fontSize: '0.62rem', color: 'rgba(99,202,183,0.6)' }}>ElevenLabs</span>
+                  </div>
+                ))}
+                <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', padding: '0.2rem 0.6rem', margin: '4px 0 2px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.4rem' }}>Browser fallback</p>
                 {voices.map(v => (
                   <button key={v.name} onClick={() => selectVoice(v.name)}
                     style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0.35rem 0.6rem', borderRadius: 7, border: 'none', background: voiceName === v.name ? 'rgba(251,191,36,0.12)' : 'transparent', cursor: 'pointer', textAlign: 'left' }}>
