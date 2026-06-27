@@ -353,46 +353,70 @@ router.post('/chat', async (req, res) => {
   }
 });
 
+const ELEVENLABS_PREMADE_VOICES = [
+  { name: 'Nicole', id: 'piTKgcLEGmPEeTBg2iYc' },
+  { name: 'Rachel', id: '21m00Tcm4TlvDq8ikWAM' },
+  { name: 'Bella',  id: 'EXAVITQu4vr4xnSDxMaL' },
+  { name: 'Elli',   id: 'MF3mGyEYCl7XYWbV9V6O' },
+  { name: 'Antoni', id: 'ErXwobaYiN019vkySvjV' },
+  { name: 'Adam',   id: 'pNInz6obpgDQGcFmaJgB' },
+];
+
+function tryElevenLabsVoice(apiKey, voiceId, bodyStr) {
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.elevenlabs.io',
+      path: `/v1/text-to-speech/${voiceId}`,
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+        'Accept': 'audio/mpeg',
+      },
+    }, res => {
+      if (res.statusCode === 200) return resolve(res);
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => reject({ status: res.statusCode, detail: Buffer.concat(chunks).toString() }));
+    });
+    req.on('error', reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
 // ElevenLabs TTS proxy
 router.post('/tts', async (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID;
-  if (!apiKey || !voiceId) return res.status(503).json({ error: 'TTS not configured' });
+  if (!apiKey) return res.status(503).json({ error: 'TTS not configured' });
 
-  const body = JSON.stringify({
+  const bodyStr = JSON.stringify({
     text: text.slice(0, 500),
     model_id: 'eleven_turbo_v2',
     voice_settings: { stability: 0.5, similarity_boost: 0.75 },
   });
 
-  const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`);
-  const elReq = https.request({
-    hostname: url.hostname,
-    path: url.pathname,
-    method: 'POST',
-    headers: {
-      'xi-api-key': apiKey,
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'Accept': 'audio/mpeg',
-    },
-  }, elRes => {
-    if (elRes.statusCode !== 200) {
-      const chunks = [];
-      elRes.on('data', c => chunks.push(c));
-      elRes.on('end', () => res.status(502).json({ error: 'ElevenLabs error', detail: Buffer.concat(chunks).toString() }));
-      return;
-    }
-    res.setHeader('Content-Type', 'audio/mpeg');
-    elRes.pipe(res);
-  });
+  const preferredId = process.env.ELEVENLABS_VOICE_ID;
+  const voiceQueue = preferredId
+    ? [{ name: 'preferred', id: preferredId }, ...ELEVENLABS_PREMADE_VOICES]
+    : ELEVENLABS_PREMADE_VOICES;
 
-  elReq.on('error', err => res.status(502).json({ error: err.message }));
-  elReq.write(body);
-  elReq.end();
+  for (const voice of voiceQueue) {
+    try {
+      const audioRes = await tryElevenLabsVoice(apiKey, voice.id, bodyStr);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      audioRes.pipe(res);
+      return;
+    } catch (err) {
+      console.warn(`[tts] voice ${voice.name} failed:`, err.detail || err.message || err);
+    }
+  }
+
+  res.status(502).json({ error: 'All ElevenLabs voices failed' });
 });
 
 module.exports = router;
