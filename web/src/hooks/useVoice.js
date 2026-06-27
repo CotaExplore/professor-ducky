@@ -22,33 +22,28 @@ export function saveVoiceName(name) {
   localStorage.setItem(VOICE_KEY, name);
 }
 
-let elevenLabsAvailable = null;
-
 export async function speakText(text, { onStart, onEnd, onMouth, voiceName } = {}) {
   if (!text) return;
   window.speechSynthesis?.cancel();
 
-  if (elevenLabsAvailable !== false) {
-    try {
-      const { data: blob, status } = await ttsApi.post('/tts', { text }, { responseType: 'blob' });
-      if (status === 200) {
-        elevenLabsAvailable = true;
-        const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob], { type: 'audio/mpeg' }));
-        const audio = new Audio(url);
-        let mouthInterval = null;
-        audio.onplay = () => {
-          onStart?.();
-          let open = true;
-          mouthInterval = setInterval(() => { open = !open; onMouth?.(open); }, 110);
-        };
-        audio.onended = () => { clearInterval(mouthInterval); onMouth?.(false); URL.revokeObjectURL(url); onEnd?.(); };
-        audio.onerror = () => { clearInterval(mouthInterval); onMouth?.(false); URL.revokeObjectURL(url); onEnd?.(); };
-        await audio.play();
-        return;
-      }
-    } catch (err) {
-      if (err.response?.status === 503 || err.response?.status === 502) elevenLabsAvailable = false;
+  try {
+    const { data: blob, status } = await ttsApi.post('/tts', { text }, { responseType: 'blob' });
+    if (status === 200) {
+      const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob], { type: 'audio/mpeg' }));
+      const audio = new Audio(url);
+      let mouthInterval = null;
+      audio.onplay = () => {
+        onStart?.();
+        let open = true;
+        mouthInterval = setInterval(() => { open = !open; onMouth?.(open); }, 110);
+      };
+      audio.onended = () => { clearInterval(mouthInterval); onMouth?.(false); URL.revokeObjectURL(url); onEnd?.(); };
+      audio.onerror = () => { clearInterval(mouthInterval); onMouth?.(false); URL.revokeObjectURL(url); onEnd?.(); };
+      await audio.play();
+      return;
     }
+  } catch (err) {
+    console.warn('[tts] ElevenLabs failed, falling back to browser TTS:', err.message);
   }
 
   if (!window.speechSynthesis) return;
